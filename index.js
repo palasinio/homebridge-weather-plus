@@ -170,8 +170,8 @@ WeatherPlusPlatform.prototype = {
 		station.compatibility = "currentObservations" in stationConfig && stationConfig.currentObservations === "eve" ? "eve2" : station.compatibility; // old eve is now eve2
 		station.compatibility = ["eve", "eve2", "home", "both"].includes(station.compatibility) ? station.compatibility : "eve";
 
-		// Condition detail level
-		station.conditionDetail = stationConfig.conditionCategory || "simple";
+		// Condition detail level — stored as boolean so downstream detail ? x : y checks work correctly
+		station.conditionDetail = (stationConfig.conditionCategory === 'detailed');
 
 		// Separate humidity accessory
 		station.extraHumidity = stationConfig.extraHumidity || false;
