@@ -142,7 +142,7 @@ Optional permanent five-character DWD station identifier. If configured, Weather
 
 Weather Plus exposes today plus seven forecast days, matching its existing configuration range even though DWD MOSMIX may provide up to ten days. Hourly precipitation is summed per local calendar day; extrema such as temperature, wind speed, and gusts use the actual hourly minimum or maximum. Sunrise and sunset are calculated locally without another internet service.
 
-Bright Sky can omit individual measurements. Missing values are not invented or written as zero. The last valid current value remains in HomeKit; dew point and apparent temperature are calculated only when all required inputs are available. The API's sunshine duration has no matching Weather Plus characteristic and is therefore not exposed. Solar irradiation is converted from Bright Sky's interval energy (`kWh/m²`) to the Weather Plus solar-radiation unit (`W/m²`).
+Bright Sky can omit individual measurements. Missing values are not invented or written as zero. The last valid current value remains in HomeKit; dew point and apparent temperature are calculated only when all required inputs are available. `Rain1h` is published only when Bright Sky supplies a real 60-minute precipitation value. Values filled from a different DWD station through `fallback_source_ids` are ignored when `dwdStationId` is configured. Visible conditions are localized in German or English, with English as the fallback for other languages. The API's sunshine duration has no matching Weather Plus characteristic and is therefore not exposed. Solar irradiation is converted from Bright Sky's interval energy (`kWh/m²`) to the Weather Plus solar-radiation unit (`W/m²`).
 
 ```json
 "platforms": [

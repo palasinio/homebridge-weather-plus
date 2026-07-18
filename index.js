@@ -140,6 +140,17 @@ WeatherPlusPlatform.prototype = {
 			return false;
 		}
 		station.service = stationConfig.service.toLowerCase().replace(/\s/g, "");
+		if (["openweathermap", "weatherunderground", "weewx"].includes(station.service) && !stationConfig.key)
+		{
+			this.log.error("No API key or data URL configured for station: " + station.service);
+			return false;
+		}
+		if (station.service === "brightsky" && (!Array.isArray(stationConfig.locationGeo) || stationConfig.locationGeo.length !== 2 ||
+			stationConfig.locationGeo.some((coordinate) => typeof coordinate !== "number" || !isFinite(coordinate))))
+		{
+			this.log.error("Bright Sky requires locationGeo with numeric latitude and longitude.");
+			return false;
+		}
 
 		// Location id. Multiple parameter names are possible for backwards compatibility
 		station.locationId = "";

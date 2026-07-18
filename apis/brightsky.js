@@ -7,6 +7,35 @@ const axios = require('axios'),
 	moment = require('moment-timezone'),
 	wformula = require('weather-formulas');
 
+const conditionTranslations = {
+	en: {
+		clear: 'Clear',
+		dry: 'Dry',
+		'partly-cloudy': 'Partly cloudy',
+		cloudy: 'Cloudy',
+		fog: 'Fog',
+		wind: 'Windy',
+		rain: 'Rain',
+		sleet: 'Sleet',
+		snow: 'Snow',
+		hail: 'Hail',
+		thunderstorm: 'Thunderstorm'
+	},
+	de: {
+		clear: 'Klar',
+		dry: 'Trocken',
+		'partly-cloudy': 'Teilweise bewölkt',
+		cloudy: 'Bewölkt',
+		fog: 'Nebel',
+		wind: 'Windig',
+		rain: 'Regen',
+		sleet: 'Schneeregen',
+		snow: 'Schnee',
+		hail: 'Hagel',
+		thunderstorm: 'Gewitter'
+	}
+};
+
 class BrightSkyAPI
 {
 	constructor(locationGeo, dwdStationId, language, conditionDetail, log)
@@ -76,47 +105,88 @@ class BrightSkyAPI
 	update(forecastDays, callback)
 	{
 		this.log.debug('Updating weather with Bright Sky');
-		const requests = [this.getWeatherData('/current_weather', {})];
 		const wantsForecast = Array.isArray(forecastDays) && forecastDays.length > 0;
+		const requests = [this.settle(this.loadCurrent())];
 		if (wantsForecast)
 		{
-			const first = moment.tz(this.timezone).startOf('day');
-			const last = first.clone().add(this.forecastDays, 'days').subtract(1, 'hour');
-			requests.push(this.getWeatherData('/weather', {
-				date: first.format(),
-				last_date: last.format()
-			}));
+			requests.push(this.settle(this.loadForecast()));
 		}
 
 		Promise.all(requests)
 			.then((results) =>
 			{
-				const current = results[0];
-				this.validateStation(current.weather, current.sources, 'current weather');
-				const parsed = this.parseCurrentWeather(current.weather, current.sources);
-				this.lastReport = this.mergeAvailable(this.lastReport, parsed);
-				const weather = {report: Object.assign({}, this.lastReport), forecasts: []};
-
-				if (wantsForecast)
+				const weather = {forecasts: []};
+				let successful = false;
+				if (results[0].value)
 				{
-					const hourly = results[1];
-					this.validateForecastStations(hourly.weather, hourly.sources);
-					weather.forecasts = this.aggregateForecasts(hourly.weather);
-				}
-				callback(null, weather);
-			})
-			.catch((error) =>
-			{
-				if (error.response && error.response.status === 429)
-				{
-					this.log.warn('Bright Sky rate limit reached; keeping the last valid values.');
+					weather.report = results[0].value;
+					successful = true;
 				}
 				else
 				{
-					this.log.error('Bright Sky update failed: ' + error.message);
+					this.logRequestError('current weather', results[0].error);
 				}
-				callback(error);
+
+				if (wantsForecast && results[1].value)
+				{
+					weather.forecasts = results[1].value;
+					successful = true;
+				}
+				else if (wantsForecast)
+				{
+					this.logRequestError('forecast', results[1].error);
+				}
+
+				callback(successful ? null : results[0].error || results[1].error, successful ? weather : undefined);
 			});
+	}
+
+	loadCurrent()
+	{
+		return this.getWeatherData('/current_weather', {})
+			.then((current) =>
+			{
+				this.validateStation(current.weather, current.sources, 'current weather');
+				const values = this.filterForeignFallbackValues(current.weather, current.sources, 'current weather');
+				const parsed = this.parseCurrentWeather(values, current.sources);
+				this.lastReport = this.mergeAvailable(this.lastReport, parsed);
+				return Object.assign({}, this.lastReport);
+			});
+	}
+
+	loadForecast()
+	{
+		const first = moment.tz(this.timezone).startOf('day');
+		const last = first.clone().add(this.forecastDays, 'days').subtract(1, 'hour');
+		return this.getWeatherData('/weather', {date: first.format(), last_date: last.format()})
+			.then((hourly) =>
+			{
+				this.validateForecastStations(hourly.weather, hourly.sources);
+				const values = (hourly.weather || []).map((record) =>
+					this.filterForeignFallbackValues(record, hourly.sources, 'forecast'));
+				return this.aggregateForecasts(values);
+			});
+	}
+
+	settle(promise)
+	{
+		return promise.then((value) => ({value: value}), (error) => ({error: error}));
+	}
+
+	logRequestError(context, error)
+	{
+		if (error && error.response && error.response.status === 429)
+		{
+			this.log.warn('Bright Sky ' + context + ' rate limit reached; keeping the last valid values.');
+		}
+		else if (error && error.code === 'ECONNABORTED')
+		{
+			this.log.error('Bright Sky ' + context + ' request timed out after ' + this.timeout + ' ms.');
+		}
+		else
+		{
+			this.log.error('Bright Sky ' + context + ' update failed: ' + (error ? error.message : 'unknown error'));
+		}
 	}
 
 	getWeatherData(path, parameters)
@@ -157,14 +227,20 @@ class BrightSkyAPI
 			this.log.warn('Bright Sky observation timestamp is in the future: ' + values.timestamp);
 		}
 
+		const conditionKey = this.getConditionKey(values);
+		const rainState = this.getRainState(values, conditionKey);
+		const snowState = this.getSnowState(values, conditionKey);
 		const report = {
 			ObservationTime: timestamp.tz(this.timezone).format('HH:mm:ss'),
-			ObservationStation: this.stationLabel(source),
-			Condition: this.conditionLabel(values),
-			ConditionCategory: this.getConditionCategory(values.condition, values.icon, this.conditionDetail),
-			RainBool: this.isRain(values),
-			SnowBool: this.isSnow(values)
+			ObservationStation: this.stationLabel(source)
 		};
+		if (conditionKey)
+		{
+			report.Condition = this.translateCondition(conditionKey);
+			report.ConditionCategory = this.getConditionCategory(conditionKey, this.conditionDetail);
+		}
+		if (rainState !== undefined) report.RainBool = rainState;
+		if (snowState !== undefined) report.SnowBool = snowState;
 		this.assignNumber(report, 'Temperature', values.temperature);
 		this.assignNumber(report, 'Humidity', values.relative_humidity);
 		this.assignNumber(report, 'AirPressure', values.pressure_msl);
@@ -175,8 +251,7 @@ class BrightSkyAPI
 		const direction = this.firstNumber(values, ['wind_direction_10', 'wind_direction_30', 'wind_direction_60']);
 		if (this.isNumber(direction)) report.WindDirection = converter.getWindDirection(direction);
 
-		const precipitation = this.firstNumber(values, ['precipitation_60', 'precipitation_30', 'precipitation_10']);
-		this.assignNumber(report, 'Rain1h', precipitation);
+		this.assignNumber(report, 'Rain1h', values.precipitation_60);
 		const solar = this.intervalEnergyToPower(values);
 		this.assignNumber(report, 'SolarRadiation', solar);
 
@@ -216,13 +291,19 @@ class BrightSkyAPI
 			const conditionValue = this.selectDailyCondition(values);
 			const forecast = {
 				ForecastDay: date.clone().locale(this.language).format('dddd'),
-				Condition: this.conditionLabel(conditionValue),
-				ConditionCategory: this.getConditionCategory(conditionValue.condition, conditionValue.icon, this.conditionDetail),
-				RainBool: values.some((value) => this.isRain(value)),
-				SnowBool: values.some((value) => this.isSnow(value)),
 				SunriseTime: this.calculateSunTime(date, true),
 				SunsetTime: this.calculateSunTime(date, false)
 			};
+			if (conditionValue)
+			{
+				const conditionKey = this.getConditionKey(conditionValue);
+				forecast.Condition = this.translateCondition(conditionKey);
+				forecast.ConditionCategory = this.getConditionCategory(conditionKey, this.conditionDetail);
+			}
+			const rainState = this.combineStates(values.map((value) => this.getRainState(value, this.getConditionKey(value))));
+			const snowState = this.combineStates(values.map((value) => this.getSnowState(value, this.getConditionKey(value))));
+			if (rainState !== undefined) forecast.RainBool = rainState;
+			if (snowState !== undefined) forecast.SnowBool = snowState;
 			this.assignNumber(forecast, 'TemperatureMax', this.maximum(values, 'temperature'));
 			this.assignNumber(forecast, 'TemperatureMin', this.minimum(values, 'temperature'));
 			this.assignNumber(forecast, 'Humidity', this.average(values, 'relative_humidity'));
@@ -247,22 +328,31 @@ class BrightSkyAPI
 	validateStation(record, sources, context)
 	{
 		if (!this.dwdStationId) return;
-		const sourceIds = [];
-		if (record && record.source_id !== undefined) sourceIds.push(record.source_id);
-		if (record && record.fallback_source_ids)
+		const source = this.sourceFor(record && record.source_id, sources);
+		if (!source || source.dwd_station_id !== this.dwdStationId)
 		{
-			Object.keys(record.fallback_source_ids).forEach((key) => sourceIds.push(record.fallback_source_ids[key]));
+			throw new Error('Bright Sky ' + context + ' main source does not match configured DWD station ' + this.dwdStationId + '.');
 		}
-		const invalidSourceId = sourceIds.find((sourceId) =>
+	}
+
+	filterForeignFallbackValues(record, sources, context)
+	{
+		const filtered = Object.assign({}, record);
+		if (!this.dwdStationId || !record || !record.fallback_source_ids) return filtered;
+		// Bright Sky maps each filled parameter to the source that supplied it.
+		// Keep a valid main report, but omit fields filled from another station.
+		Object.keys(record.fallback_source_ids).forEach((field) =>
 		{
+			const sourceId = record.fallback_source_ids[field];
 			const source = this.sourceFor(sourceId, sources);
-			return !source || source.dwd_station_id !== this.dwdStationId;
+			if (!source || source.dwd_station_id !== this.dwdStationId)
+			{
+				delete filtered[field];
+				this.log.warn('Ignoring Bright Sky ' + context + ' field ' + field + ' from fallback source ' + sourceId +
+					' because it does not match configured DWD station ' + this.dwdStationId + '.');
+			}
 		});
-		if (sourceIds.length === 0 || invalidSourceId !== undefined)
-		{
-			throw new Error('Bright Sky ' + context + ' source' + (invalidSourceId === undefined ? '' : ' ' + invalidSourceId) +
-				' does not match configured DWD station ' + this.dwdStationId + '.');
-		}
+		return filtered;
 	}
 
 	validateForecastStations(records, sources)
@@ -285,57 +375,78 @@ class BrightSkyAPI
 		return (source.station_name || 'Bright Sky') + (identifiers.length ? ' (' + identifiers.join(', ') + ')' : '');
 	}
 
-	conditionLabel(value)
+	getConditionKey(value)
 	{
 		if (!value) return undefined;
-		if (value.condition && value.condition !== 'dry') return value.condition;
-		const icon = value.icon || '';
-		if (icon.indexOf('partly-cloudy') === 0) return 'partly cloudy';
-		if (icon === 'cloudy') return 'cloudy';
+		const known = Object.keys(conditionTranslations.en);
+		const condition = typeof value.condition === 'string' ? value.condition.toLowerCase() : undefined;
+		if (condition && condition !== 'dry') return known.includes(condition) ? condition : undefined;
+		const icon = typeof value.icon === 'string' ? value.icon.toLowerCase() : undefined;
 		if (icon === 'clear-day' || icon === 'clear-night') return 'clear';
-		if (icon) return icon.replace(/-/g, ' ');
-		return value.condition;
+		if (icon === 'partly-cloudy-day' || icon === 'partly-cloudy-night') return 'partly-cloudy';
+		if (icon && known.includes(icon)) return icon;
+		return condition === 'dry' ? 'dry' : undefined;
 	}
 
-	getConditionCategory(condition, icon, detail)
+	translateCondition(conditionKey)
 	{
-		const value = condition && condition !== 'dry' ? condition : icon;
-		if (value === 'thunderstorm' || value === 'wind') return detail ? 9 : (value === 'wind' ? 1 : 2);
-		if (value === 'snow' || value === 'sleet') return detail ? 8 : 3;
-		if (value === 'hail') return detail ? 7 : 2;
-		if (value === 'rain') return detail ? 6 : 2;
-		if (value === 'fog') return detail ? 4 : 1;
-		if (value === 'cloudy') return detail ? 3 : 1;
-		if (value && value.indexOf('partly-cloudy') === 0) return detail ? 2 : 1;
-		return 0;
+		if (!conditionKey) return undefined;
+		const translations = conditionTranslations[this.language] || conditionTranslations.en;
+		return translations[conditionKey] || conditionTranslations.en[conditionKey];
+	}
+
+	getConditionCategory(conditionKey, detail)
+	{
+		if (!conditionKey) return undefined;
+		if (conditionKey === 'thunderstorm' || conditionKey === 'wind') return detail ? 9 : (conditionKey === 'wind' ? 1 : 2);
+		if (conditionKey === 'snow' || conditionKey === 'sleet') return detail ? 8 : 3;
+		if (conditionKey === 'hail') return detail ? 7 : 2;
+		if (conditionKey === 'rain') return detail ? 6 : 2;
+		if (conditionKey === 'fog') return detail ? 4 : 1;
+		if (conditionKey === 'cloudy') return detail ? 3 : 1;
+		if (conditionKey === 'partly-cloudy') return detail ? 2 : 1;
+		if (conditionKey === 'clear' || conditionKey === 'dry') return 0;
+		return undefined;
 	}
 
 	selectDailyCondition(values)
 	{
-		return values.reduce((selected, value) => this.conditionPriority(value) > this.conditionPriority(selected) ? value : selected, values[0]);
+		const selected = values.reduce((current, value) => this.conditionPriority(value) > this.conditionPriority(current) ? value : current, values[0]);
+		return this.conditionPriority(selected) >= 0 ? selected : undefined;
 	}
 
 	conditionPriority(value)
 	{
 		if (!value) return -1;
-		const key = value.condition && value.condition !== 'dry' ? value.condition : value.icon;
+		const key = this.getConditionKey(value);
 		const priorities = {thunderstorm: 100, hail: 90, snow: 80, sleet: 75, rain: 60, fog: 40, wind: 35,
-			cloudy: 20, 'partly-cloudy-day': 10, 'partly-cloudy-night': 10, 'clear-day': 0, 'clear-night': 0, dry: 0};
-		let priority = priorities[key] === undefined ? 0 : priorities[key];
+			cloudy: 20, 'partly-cloudy': 10, clear: 0, dry: 0};
+		let priority = priorities[key] === undefined ? -1 : priorities[key];
 		if (key === 'rain' && this.isNumber(value.precipitation)) priority += Math.min(value.precipitation, 20);
 		return priority;
 	}
 
-	isRain(value)
+	getRainState(value, conditionKey)
 	{
-		return ['rain', 'sleet', 'hail', 'thunderstorm'].includes(value.condition) || this.isNumber(value.precipitation) && value.precipitation > 0 ||
-			this.isNumber(value.precipitation_60) && value.precipitation_60 > 0 || this.isNumber(value.precipitation_30) && value.precipitation_30 > 0 ||
-			this.isNumber(value.precipitation_10) && value.precipitation_10 > 0;
+		const precipitation = this.firstNumber(value, ['precipitation', 'precipitation_60', 'precipitation_30', 'precipitation_10']);
+		if (this.isNumber(precipitation) && precipitation > 0) return true;
+		if (['rain', 'sleet', 'hail', 'thunderstorm'].includes(conditionKey)) return true;
+		if (this.isNumber(precipitation) || conditionKey) return false;
+		return undefined;
 	}
 
-	isSnow(value)
+	getSnowState(value, conditionKey)
 	{
-		return ['snow', 'sleet'].includes(value.condition) || ['snow', 'sleet'].includes(value.icon);
+		if (conditionKey === 'snow' || conditionKey === 'sleet') return true;
+		if (conditionKey) return false;
+		return undefined;
+	}
+
+	combineStates(states)
+	{
+		if (states.includes(true)) return true;
+		if (states.includes(false)) return false;
+		return undefined;
 	}
 
 	calculateDewPoint(temperature, humidity)
