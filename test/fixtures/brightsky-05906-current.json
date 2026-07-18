@@ -1,0 +1,33 @@
+{
+  "weather": {
+    "timestamp": "2026-07-10T21:30:00Z",
+    "source_id": 184398,
+    "temperature": 24.8,
+    "relative_humidity": 44,
+    "dew_point": 11.58,
+    "pressure_msl": 1015.1,
+    "wind_speed_10": 8.3,
+    "wind_gust_speed_10": 16.2,
+    "precipitation_10": 0,
+    "precipitation_30": 0,
+    "precipitation_60": 0,
+    "cloud_cover": 0,
+    "condition": "dry",
+    "icon": "clear-night"
+  },
+  "sources": [
+    {
+      "id": 184398,
+      "dwd_station_id": "05906",
+      "wmo_station_id": "10729",
+      "station_name": "Mannheim",
+      "observation_type": "synop",
+      "first_record": "2026-07-10T00:00:00Z",
+      "last_record": "2026-07-10T21:30:00Z",
+      "lat": 49.509,
+      "lon": 8.554,
+      "height": 96,
+      "distance": 500
+    }
+  ]
+}

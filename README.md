@@ -29,15 +29,15 @@ Feel free to leave any feedback [here](https://github.com/naofireblade/homebridg
 
 This plugin supports multiple weather services. Each has its own advantages. The following table shows a comparison to help you to choose one.
 
-|                            |             OpenWeatherMap (recommended)              |       Weather Underground <sup>[2](#a2)</sup>        |     Tempest weather station <sup>[7](#a7)</sup>      |
-|----------------------------|:-----------------------------------------------------:|:----------------------------------------------------:|:----------------------------------------------------:|
-| Current observation values |                          15                           |                          12                          |                          20                          |
-| Forecast values            |                 18<sup>[6](#a6)</sup>                 |                          0                           |                          10                          |
-| Forecast days              |             today + 7<sup>[6](#a6)</sup>              |                          0                           |                      today + 9                       |
-| Location                   |              city name, geo-coordinates               |                      station id                      |                        local                         |
-| Personal weather stations  |                  :heavy_check_mark:                   |                  :heavy_check_mark:                  |                  :heavy_check_mark:                  |
-| Free                       |                  :heavy_check_mark:                   |    :heavy_check_mark: (only if you own a station)    |      :heavy_check_mark: (you need the station)       |
-| Register                   | [here](https://home.openweathermap.org/users/sign_up) | [here](https://www.wunderground.com/member/api-keys) |      [here](https://tempestwx.com/settings/tokens)   |
+|                            |             OpenWeatherMap (recommended)              | Bright Sky (DWD Open Data) |       Weather Underground <sup>[2](#a2)</sup>        |     Tempest weather station <sup>[7](#a7)</sup>      |
+|----------------------------|:-----------------------------------------------------:|:--------------------------:|:----------------------------------------------------:|:----------------------------------------------------:|
+| Current observation values |                          15                           |             18             |                          12                          |                          20                          |
+| Forecast values            |                 18<sup>[6](#a6)</sup>                 |             20             |                          0                           |                          10                          |
+| Forecast days              |             today + 7<sup>[6](#a6)</sup>              |         today + 7          |                          0                           |                      today + 9                       |
+| Location                   |              city name, geo-coordinates               | geo-coordinates, DWD id optional |                      station id                      |                        local                         |
+| Personal weather stations  |                  :heavy_check_mark:                   |                            |                  :heavy_check_mark:                  |                  :heavy_check_mark:                  |
+| Free                       |                  :heavy_check_mark:                   |     :heavy_check_mark:      |    :heavy_check_mark: (only if you own a station)    |      :heavy_check_mark: (you need the station)       |
+| Register                   | [here](https://home.openweathermap.org/users/sign_up) |       not required         | [here](https://www.wunderground.com/member/api-keys) |      [here](https://tempestwx.com/settings/tokens)   |
 
 *You can add more services easily by forking the project and submitting a pull request for a new api file.*
 
@@ -49,7 +49,7 @@ This plugin supports multiple weather services. Each has its own advantages. The
 
 1. Install homebridge using: `npm install -g homebridge`
 2. Install this plugin using: `npm install -g homebridge-weather-plus` *Note: The installation might take 5 minutes.*
-3. Gather an API key for a weather service from the register link in the table above
+3. Gather an API key for a weather service from the register link in the table above (Bright Sky does not require one)
 4. Configure via the plugin `homebridge-config-ui-x` or update your configuration file manually. See the explanations and samples below.
 
 ## Observations and Forecasts
@@ -125,6 +125,34 @@ Api Version to be used for open weather map requests. '2.5' is available for fre
 		"locationCity": "Berlin, DE",
 		"locationGeo": [52.5200066, 13.404954]
 	}
+]
+```
+
+### Bright Sky (DWD Open Data)
+
+[Bright Sky](https://brightsky.dev/) provides DWD Open Data through a free JSON API. It does not require registration or an API key. Current conditions come from Bright Sky's `current_weather` endpoint; forecasts use hourly DWD MOSMIX records from the `weather` endpoint.
+
+**locationGeo**
+
+Required latitude and longitude. They determine the local timezone, daily forecast boundaries, and locally calculated sunrise and sunset times.
+
+**dwdStationId**
+
+Optional permanent five-character DWD station identifier. If configured, Weather Plus requests that station and rejects a response whose selected source belongs to another DWD station. Bright Sky `source_id` values are deliberately not used as permanent identifiers. For Mannheim/Vogelstang, DWD station `05906` corresponds to WMO station `10729`.
+
+Weather Plus exposes today plus seven forecast days, matching its existing configuration range even though DWD MOSMIX may provide up to ten days. Hourly precipitation is summed per local calendar day; extrema such as temperature, wind speed, and gusts use the actual hourly minimum or maximum. Sunrise and sunset are calculated locally without another internet service.
+
+Bright Sky can omit individual measurements. Missing values are not invented or written as zero. The last valid current value remains in HomeKit; dew point and apparent temperature are calculated only when all required inputs are available. The API's sunshine duration has no matching Weather Plus characteristic and is therefore not exposed. Solar irradiation is converted from Bright Sky's interval energy (`kWh/m²`) to the Weather Plus solar-radiation unit (`W/m²`).
+
+```json
+"platforms": [
+    {
+        "platform": "WeatherPlus",
+        "service": "brightsky",
+        "locationGeo": [49.5063, 8.55844],
+        "dwdStationId": "05906",
+        "forecast": [0, 1, 2, 3, 4, 5, 6, 7]
+    }
 ]
 ```
 

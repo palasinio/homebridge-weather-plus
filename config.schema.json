@@ -55,6 +55,10 @@
                 "const": "openweathermap"
               },
               {
+                "title": "Bright Sky (DWD Open Data)",
+                "const": "brightsky"
+              },
+              {
                 "title": "Weather Underground",
                 "const": "weatherunderground"
               },
@@ -69,8 +73,7 @@
             ]
           },
           "key": {
-            "type": "string",
-            "required": true
+            "type": "string"
           },
           "locationGeo": {
             "type": "array",
@@ -85,6 +88,10 @@
           },
           "stationId": {
             "type": "string"
+          },
+          "dwdStationId": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z]{5}$"
           },
           "language": {
             "type": "string",
@@ -313,6 +320,13 @@
             },
             {
               "type": "help",
+              "helpvalue": "<h6>Bright Sky</h6><p class='help-block'>Free DWD Open Data weather data. No API key is required.</p>",
+              "condition": {
+                "functionBody": "return model.stations[arrayIndices[0]].service === 'brightsky'"
+              }
+            },
+            {
+              "type": "help",
               "helpvalue": "<h6>API Key</h6><p class='help-block'>Registration is available for users with a PWS. Get your free api key <a target='_blank' href='https://www.wunderground.com/member/api-keys'>here</a>.</p>",
               "condition": {
                 "functionBody": "return model.stations[arrayIndices[0]].service === 'weatherunderground'"
@@ -334,7 +348,10 @@
             },
             {
               "key": "stations[].key",
-              "notitle": true
+              "notitle": true,
+              "condition": {
+                "functionBody": "return model.stations[arrayIndices[0]].service !== 'brightsky'"
+              }
             },
             {
               "type": "help",
@@ -360,9 +377,9 @@
             },
             {
               "type": "help",
-              "helpvalue": "<h6>Geo coordinates</h6><p class='help-block'>Optional: Enter geo coordinates (1. latitude, 2. longitude). Find your coordinates <a target='_blank' href='http://www.mapcoordinates.net/en'>here</a>.</p>",
+              "helpvalue": "<h6>Geo coordinates</h6><p class='help-block'>Enter latitude and longitude. Coordinates are required by Bright Sky and optional for OpenWeatherMap. Find your coordinates <a target='_blank' href='http://www.mapcoordinates.net/en'>here</a>.</p>",
               "condition": {
-                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap'"
+                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap' || model.stations[arrayIndices[0]].service === 'brightsky'"
               }
             },
             {
@@ -377,14 +394,14 @@
                 }
               ],
               "condition": {
-                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap'"
+                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap' || model.stations[arrayIndices[0]].service === 'brightsky'"
               }
             },
             {
               "type": "help",
               "helpvalue": "<br/>",
               "condition": {
-                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap'"
+                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap' || model.stations[arrayIndices[0]].service === 'brightsky'"
               }
             },
             {
@@ -393,6 +410,14 @@
               "description": "Your personal StationID.",
               "condition": {
                 "functionBody": "return model.stations[arrayIndices[0]].service === 'weatherunderground' || model.stations[arrayIndices[0]].service === 'tempest'"
+              }
+            },
+            {
+              "key": "stations[].dwdStationId",
+              "title": "DWD Station Id (optional)",
+              "description": "Permanent five-character DWD station identifier. Responses from another station are rejected.",
+              "condition": {
+                "functionBody": "return model.stations[arrayIndices[0]].service === 'brightsky'"
               }
             },
             {
@@ -453,7 +478,7 @@
                 }
               ],
               "condition": {
-                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap' || model.stations[arrayIndices[0]].service === 'tempest'"
+                "functionBody": "return model.stations[arrayIndices[0]].service === 'openweathermap' || model.stations[arrayIndices[0]].service === 'tempest' || model.stations[arrayIndices[0]].service === 'brightsky'"
               }
             },
             {

@@ -3,6 +3,7 @@
 
 const weatherunderground = require("./apis/weatherunderground").WundergroundAPI,
 	openweathermap = require("./apis/openweathermap").OpenWeatherMapAPI,
+	brightsky = require("./apis/brightsky").BrightSkyAPI,
 	weewx = require("./apis/weewx").WeewxAPI,
 	tempest = require('./apis/weatherflow').TempestAPI,
 	debug = require("debug")("homebridge-weather-plus"),
@@ -76,6 +77,10 @@ function WeatherPlusPlatform(_log, _config)
 				this.log.info("Adding station with weather service OpenWeatherMap named '" + config.nameNow + "'");
 				this.stations.push(new openweathermap(config.key, config.language, config.locationId, config.locationGeo, config.locationCity, config.conditionDetail, this.log));
 				break;
+			case "brightsky":
+				this.log.info("Adding station with weather service Bright Sky named '" + config.nameNow + "'");
+				this.stations.push(new brightsky(config.locationGeo, config.dwdStationId, config.language, config.conditionDetail, this.log));
+				break;
 			case "weewx":
 				this.log.info("Adding station with weather service Weewx named '" + config.nameNow + "'");
 				this.stations.push(new weewx(config.key, this.log));
@@ -143,6 +148,7 @@ WeatherPlusPlatform.prototype = {
 		station.locationId = stationConfig.locationId || station.locationId;
 		station.locationGeo = stationConfig.locationGeo;
 		station.locationCity = stationConfig.locationCity;
+		station.dwdStationId = stationConfig.dwdStationId;
 		if (!station.locationCity && (station.service === "tempest"))
 		{
 			// If location city is not set for Tempest, set it so that in HomeKit the Serial Number is reported as "tempest - local"
@@ -322,6 +328,10 @@ WeatherPlusPlatform.prototype = {
 	// Save changes from update in characteristics
 	saveCharacteristic: function (accessory, name, value, type)
 	{
+		// Do not replace the last valid HomeKit value when an API omits an
+		// optional measurement in an otherwise valid response.
+		if (value === null || value === undefined || (typeof value === "number" && isNaN(value))) return;
+
 		let config = accessory.config;
 		let temperatureService = type === "current" ? accessory.CurrentConditionsService : accessory.ForecastService;
 
