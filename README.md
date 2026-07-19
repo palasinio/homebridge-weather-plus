@@ -6,6 +6,8 @@
 
 This is a weather plugin for [homebridge](https://github.com/nfarina/homebridge) that features current observations, daily forecasts and history graphs for multiple locations and services. You can download it via [npm](https://www.npmjs.com/package/homebridge-weather-plus).  
 
+> **Development transparency:** The Bright Sky integration, its automated tests, the current-weather comparison helper, and the related documentation were implemented and revised with OpenAI Codex under human direction and review.
+
 ![Screenshots](https://user-images.githubusercontent.com/12081369/69379083-feb05300-0caf-11ea-9a0d-cf8e1879d007.png)
 *Screenshots 2 and 3 are taken from the Elgato Eve app.*
 
@@ -148,13 +150,23 @@ Bright Sky can omit individual measurements. Missing values are not invented or 
 "platforms": [
     {
         "platform": "WeatherPlus",
+        "interval": 5,
+        "units": "ca",
         "service": "brightsky",
-        "locationGeo": [49.5063, 8.55844],
+        "locationGeo": [49.47604355, 8.48018566],
         "dwdStationId": "05906",
+        "language": "de",
+        "compatibility": "eve",
+        "conditionCategory": "detailed",
+        "nameNow": "Bright Sky",
+        "nameForecast": "Bright Sky",
+        "now": true,
         "forecast": [0, 1, 2, 3, 4, 5, 6, 7]
     }
 ]
 ```
+
+This example uses kilometres per hour for wind (`"units": "ca"`) and exposes the full set of weather characteristics to Eve (`"compatibility": "eve"`). `locationGeo` should be the actual location for which local day boundaries, sunrise, and sunset are calculated; `dwdStationId` independently selects and verifies the DWD observation station.
 
 #### Comparing current observations
 
@@ -167,8 +179,6 @@ Store the OpenWeatherMap API key under the default credential target `OpenWeathe
 ```
 
 Use `-CredentialTarget` if the credential has a different name. The output compares timestamps, coordinates, station information, temperature, humidity, pressure, cloud cover, visibility, wind, precipitation, solar irradiation, and the reported weather condition. Values are shown as reported or converted to a common display unit; apparent temperature for Bright Sky is calculated locally because the API does not provide that field directly.
-
-> **Transparency:** The Bright Sky integration, its automated tests, this comparison helper, and the related documentation were implemented and revised with OpenAI Codex under human direction and review.
 
 ### Weather Underground
 
