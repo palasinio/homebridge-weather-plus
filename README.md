@@ -156,6 +156,20 @@ Bright Sky can omit individual measurements. Missing values are not invented or 
 ]
 ```
 
+#### Comparing current observations
+
+[`Compare-CurrentWeather.ps1`](Compare-CurrentWeather.ps1) version 1.0.0 is an optional PowerShell 7 helper for comparing live OpenWeatherMap and Bright Sky current-weather observations. It is a diagnostic tool only and is not loaded or executed by Homebridge. The script requires the `TUN.CredentialManager` PowerShell module and reads the OpenWeatherMap API key from Windows Credential Manager; it does not store or print the key.
+
+Store the OpenWeatherMap API key under the default credential target `OpenWeatherMap-API`, then run:
+
+```powershell
+./Compare-CurrentWeather.ps1 -Latitude 49.5063 -Longitude 8.55844 -DwdStationId 05906
+```
+
+Use `-CredentialTarget` if the credential has a different name. The output compares timestamps, coordinates, station information, temperature, humidity, pressure, cloud cover, visibility, wind, precipitation, solar irradiation, and the reported weather condition. Values are shown as reported or converted to a common display unit; apparent temperature for Bright Sky is calculated locally because the API does not provide that field directly.
+
+> **Transparency:** The Bright Sky integration, its automated tests, this comparison helper, and the related documentation were implemented and revised with OpenAI Codex under human direction and review.
+
 ### Weather Underground
 
 Since March 2019 you need to register your own weather station with Weather Underground to get weather data in exchange. After you registered your weather device ([here](https://www.wunderground.com/member/devices)), you can use the API.
